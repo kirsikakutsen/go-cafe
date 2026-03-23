@@ -12,5 +12,5 @@ func main() {
 	if err != nil {
 		slog.Error("Error loading .env file")
 	}
-	database.Conntect()
+	database.Connect()
 }

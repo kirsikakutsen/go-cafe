@@ -11,7 +11,7 @@ import (
 
 var DB *gorm.DB
 
-func Conntect() {
+func Connect() {
 	dns := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		os.Getenv("DB_HOST"),
