@@ -47,3 +47,45 @@ func Login(c *echo.Context) error {
 
 	return c.JSON(http.StatusOK, response.NewBasicSuccessDto(resp))
 }
+
+func Signup(c *echo.Context) error {
+	var req request.AuthRequestDto
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+	}
+
+	if len(req.Password) < 8 {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(errors.New("Password must be at least 8 characters long")))
+	}
+
+	if err := validate.Struct(req); err != nil {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+	}
+
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to create account")))
+	}
+
+	acc := models.Account{
+		Username: req.Username,
+		Password: string(hashedPass),
+		ColorScheme: req.ColorScheme,
+	}
+
+	if err := database.DB.Create(&acc).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to create account")))
+	}
+
+	token, err := auth.SignPayLoad(acc.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to generate token")))
+	}
+
+	resp := response.AuthResponseDto{
+		Token: token,
+		Account: response.NewAccountDto(acc),
+	}
+
+	return c.JSON(http.StatusCreated, response.NewBasicSuccessDto(resp))
+}

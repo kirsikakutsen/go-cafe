@@ -10,4 +10,5 @@ func SetupRouter(e *echo.Echo) {
 	api := e.Group("/api")
 
 	api.POST("/auth/login", handlers.Login)
+	api.POST("/auth/signup", handlers.Signup)
 }
