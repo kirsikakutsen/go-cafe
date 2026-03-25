@@ -27,7 +27,7 @@ func Login(c *echo.Context) error {
 	}
 
 	var acc models.Account
-	if err := database.DB.Where("username = ?", req.Username).First(&acc).Error; err != nil {
+	if err := database.DB.Where("email = ?", req.Email).First(&acc).Error; err != nil {
 		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("No such account")))
 	}
 
@@ -69,6 +69,7 @@ func Signup(c *echo.Context) error {
 
 	acc := models.Account{
 		Username: req.Username,
+		Email: req.Email,
 		Password: string(hashedPass),
 		ColorScheme: req.ColorScheme,
 	}
