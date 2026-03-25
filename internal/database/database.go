@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"go-cafe/internal/models"
 	"log"
 	"os"
 
@@ -24,6 +25,11 @@ func Connect() {
 	db, err := gorm.Open(postgres.Open(dns), &gorm.Config{})
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
+	}
+
+	err = db.AutoMigrate(&models.Account{})
+	if err != nil {
+		log.Fatal("Failed to migrate database: ", err)
 	}
 
 	DB = db
