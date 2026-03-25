@@ -8,6 +8,7 @@ import (
 	"go-cafe/internal/dto/response"
 	"go-cafe/internal/models"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
@@ -35,14 +36,42 @@ func Login(c *echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid credentials")))
 	}
 
-	token, err := auth.SignPayLoad(acc.ID)
+	accessToken, err := auth.SignPayLoad(acc.ID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to generate token")))
 	}
 
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(
+				errors.New("Failed to generate refresh token"),
+			),
+		)
+	}
+
+	hashed := auth.HashToken(refreshToken)
+
+	if err := database.DB.Create(&models.RefreshToken{
+		UserID:    acc.ID,
+		TokenHash: hashed,
+		ExpiresAt: time.Now().
+			Add(7 * 24 * time.Hour),
+	}).Error; err != nil {
+
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(
+				errors.New("Failed to create refresh token"),
+			),
+		)
+	}
+
 	resp := response.AuthResponseDto{
-		Token: token,
-		Account: response.NewAccountDto(acc),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		Account:      response.NewAccountDto(acc),
 	}
 
 	return c.JSON(http.StatusOK, response.NewBasicSuccessDto(resp))
@@ -68,9 +97,9 @@ func Signup(c *echo.Context) error {
 	}
 
 	acc := models.Account{
-		Username: req.Username,
-		Email: req.Email,
-		Password: string(hashedPass),
+		Username:    req.Username,
+		Email:       req.Email,
+		Password:    string(hashedPass),
 		ColorScheme: req.ColorScheme,
 	}
 
@@ -78,14 +107,47 @@ func Signup(c *echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to create account")))
 	}
 
-	token, err := auth.SignPayLoad(acc.ID)
+	accessToken, err := auth.SignPayLoad(acc.ID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to generate token")))
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(
+				errors.New("Failed to generate token"),
+			),
+		)
+	}
+
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(
+				errors.New("Failed to generate refresh token"),
+			),
+		)
+	}
+
+	hashed := auth.HashToken(refreshToken)
+
+	if err := database.DB.Create(&models.RefreshToken{
+		UserID:    acc.ID,
+		TokenHash: hashed,
+		ExpiresAt: time.Now().
+			Add(7 * 24 * time.Hour),
+	}).Error; err != nil {
+
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(
+				errors.New("Failed to create refresh token"),
+			),
+		)
 	}
 
 	resp := response.AuthResponseDto{
-		Token: token,
-		Account: response.NewAccountDto(acc),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		Account:      response.NewAccountDto(acc),
 	}
 
 	return c.JSON(http.StatusCreated, response.NewBasicSuccessDto(resp))
