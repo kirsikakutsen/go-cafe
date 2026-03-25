@@ -27,7 +27,7 @@ func Connect() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	err = db.AutoMigrate(&models.Account{})
+	err = db.AutoMigrate(&models.Account{}, models.RefreshToken{})
 	if err != nil {
 		log.Fatal("Failed to migrate database: ", err)
 	}

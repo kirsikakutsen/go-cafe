@@ -19,6 +19,7 @@ func SignPayLoad(accID uint) (string, error) {
 	claims := jwt.MapClaims{
 		"accID": accID,
 		"exp": time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
