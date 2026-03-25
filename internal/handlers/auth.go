@@ -17,7 +17,7 @@ import (
 var validate = validator.New()
 
 func Login(c *echo.Context) error {
-	var req request.AuthRequestDto
+	var req request.LoginRequestDto
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
 	}
@@ -49,7 +49,7 @@ func Login(c *echo.Context) error {
 }
 
 func Signup(c *echo.Context) error {
-	var req request.AuthRequestDto
+	var req request.SignupRequestDto
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
 	}
