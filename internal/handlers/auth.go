@@ -28,11 +28,11 @@ func Login(c *echo.Context) error {
 
 	var acc models.Account
 	if err := database.DB.Where("email = ?", req.Email).First(&acc).Error; err != nil {
-		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("No such account")))
+		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid credentials")))
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(acc.Password), []byte(req.Password)); err != nil {
-		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Wrong credentials")))
+		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid credentials")))
 	}
 
 	token, err := auth.SignPayLoad(acc.ID)
