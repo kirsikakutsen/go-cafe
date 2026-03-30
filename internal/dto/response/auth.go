@@ -1,0 +1,7 @@
+package response
+
+type AuthResponseDto struct {
+	AccessToken string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	Account AccountResponseDto `json:"account"`
+}
