@@ -17,10 +17,45 @@ import (
 
 var validate = validator.New()
 
+const RefreshTokenTTL = 7 * 24 * time.Hour
+
+func generateAuthTokens(userID uint) (string, string, error) {
+	if err := database.DB.
+		Where("user_id = ?", userID).
+		Delete(&models.RefreshToken{}).Error; err != nil {
+		return "", "", err
+	}
+
+	accessToken, err := auth.SignPayLoad(userID)
+	if err != nil {
+		return "", "", errors.New("Failed to generate token")
+	}
+
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		return "", "", errors.New("Failed to generate refresh token")
+	}
+
+	hashed := auth.HashToken(refreshToken)
+
+	err = database.DB.Create(&models.RefreshToken{
+		UserID:    userID,
+		TokenHash: hashed,
+		ExpiresAt: time.Now().Add(RefreshTokenTTL),
+	}).Error
+
+	if err != nil {
+		return "", "", errors.New("Failed to create refresh token")
+	}
+
+	return accessToken, refreshToken, nil
+}
+
 func Login(c *echo.Context) error {
 	var req request.LoginRequestDto
+
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(errors.New("Invalid request body")))
 	}
 
 	if err := validate.Struct(req); err != nil {
@@ -28,6 +63,7 @@ func Login(c *echo.Context) error {
 	}
 
 	var acc models.Account
+
 	if err := database.DB.Where("email = ?", req.Email).First(&acc).Error; err != nil {
 		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid credentials")))
 	}
@@ -36,35 +72,11 @@ func Login(c *echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid credentials")))
 	}
 
-	accessToken, err := auth.SignPayLoad(acc.ID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to generate token")))
-	}
-
-	refreshToken, err := auth.GenerateRefreshToken()
+	accessToken, refreshToken, err := generateAuthTokens(acc.ID)
 	if err != nil {
 		return c.JSON(
 			http.StatusInternalServerError,
-			response.NewBasicErrorDto(
-				errors.New("Failed to generate refresh token"),
-			),
-		)
-	}
-
-	hashed := auth.HashToken(refreshToken)
-
-	if err := database.DB.Create(&models.RefreshToken{
-		UserID:    acc.ID,
-		TokenHash: hashed,
-		ExpiresAt: time.Now().
-			Add(7 * 24 * time.Hour),
-	}).Error; err != nil {
-
-		return c.JSON(
-			http.StatusInternalServerError,
-			response.NewBasicErrorDto(
-				errors.New("Failed to create refresh token"),
-			),
+			response.NewBasicErrorDto(errors.New("Failed to generate tokens")),
 		)
 	}
 
@@ -79,8 +91,9 @@ func Login(c *echo.Context) error {
 
 func Signup(c *echo.Context) error {
 	var req request.SignupRequestDto
+
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(errors.New("Invalid request body")))
 	}
 
 	if len(req.Password) < 8 {
@@ -107,39 +120,13 @@ func Signup(c *echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to create account")))
 	}
 
-	accessToken, err := auth.SignPayLoad(acc.ID)
+
+	accessToken, refreshToken, err := generateAuthTokens(acc.ID)
 	if err != nil {
 		return c.JSON(
 			http.StatusInternalServerError,
 			response.NewBasicErrorDto(
-				errors.New("Failed to generate token"),
-			),
-		)
-	}
-
-	refreshToken, err := auth.GenerateRefreshToken()
-	if err != nil {
-		return c.JSON(
-			http.StatusInternalServerError,
-			response.NewBasicErrorDto(
-				errors.New("Failed to generate refresh token"),
-			),
-		)
-	}
-
-	hashed := auth.HashToken(refreshToken)
-
-	if err := database.DB.Create(&models.RefreshToken{
-		UserID:    acc.ID,
-		TokenHash: hashed,
-		ExpiresAt: time.Now().
-			Add(7 * 24 * time.Hour),
-	}).Error; err != nil {
-
-		return c.JSON(
-			http.StatusInternalServerError,
-			response.NewBasicErrorDto(
-				errors.New("Failed to create refresh token"),
+				errors.New("Failed to generate tokens"),
 			),
 		)
 	}
@@ -151,4 +138,65 @@ func Signup(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, response.NewBasicSuccessDto(resp))
+}
+
+func Refresh(c *echo.Context) error {
+	var req request.RefreshRequestDto
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+	}
+
+	if err := validate.Struct(req); err != nil {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+	}
+
+	hashed := auth.HashToken(req.RefreshToken)
+
+	var token models.RefreshToken
+
+	if err := database.DB.Where("token_hash = ?", hashed).
+		First(&token).Error; err != nil {
+		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Invalid refresh token")))
+	}
+
+	if token.ExpiresAt.Before(time.Now()) {
+		return c.JSON(http.StatusUnauthorized, response.NewBasicErrorDto(errors.New("Refresh token expired")))
+	}
+
+	accessToken, refreshToken, err := generateAuthTokens(token.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, response.NewBasicErrorDto(errors.New("Failed to generate tokens")),)
+	}
+
+	return c.JSON(
+		http.StatusOK,
+		response.NewBasicSuccessDto(map[string]string{
+			"access_token":  accessToken,
+			"refresh_token": refreshToken,
+		}),
+	)
+}
+
+func Logout(c *echo.Context) error {
+	var req request.RefreshRequestDto
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, response.NewBasicErrorDto(err))
+	}
+
+	hashed := auth.HashToken(req.RefreshToken)
+
+	if err := database.DB.Delete(
+		&models.RefreshToken{},
+		"token_hash = ?",
+		hashed,
+	).Error; err != nil {
+		return c.JSON(
+			http.StatusInternalServerError,
+			response.NewBasicErrorDto(errors.New("Failed to logout")),
+		)
+	}
+
+	return c.NoContent(http.StatusOK)
 }

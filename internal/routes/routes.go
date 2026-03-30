@@ -11,4 +11,6 @@ func SetupRouter(e *echo.Echo) {
 
 	api.POST("/auth/login", handlers.Login)
 	api.POST("/auth/signup", handlers.Signup)
+	api.POST("/auth/refresh", handlers.Refresh)
+	api.POST("/auth/logout", handlers.Logout)
 }
